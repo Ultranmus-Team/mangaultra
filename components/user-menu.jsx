@@ -69,6 +69,13 @@ export default function UserMenu({ username, avatarUrl }) {
             >
               Profile
             </Link>
+            <Link
+              href="/dashboard/threads"
+              onClick={() => setOpen(false)}
+              className="block px-3 py-2 text-sm transition-colors hover:bg-accent"
+            >
+              Threads
+            </Link>
             <form action={signOutAction}>
               <button
                 type="submit"

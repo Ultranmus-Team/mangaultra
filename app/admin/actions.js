@@ -130,14 +130,15 @@ export async function sendUserBlockMessageAction(userId, prevState, formData) {
   const body = formData.get('body');
   const imageFile = formData.get('image');
 
+  let message;
   try {
     const imageBuffer = imageFile && imageFile.size > 0 ? Buffer.from(await imageFile.arrayBuffer()) : null;
-    await creator.addUserBlockMessage(profile.id, true, userId, { body, imageBuffer });
+    message = await creator.addUserBlockMessage(profile.id, true, userId, { body, imageBuffer });
   } catch (err) {
     return { error: err.message };
   }
   revalidatePath(`/admin/users/${userId}`);
-  return { success: true };
+  return { success: true, message };
 }
 
 export async function updateSettingsAction(prevState, formData) {

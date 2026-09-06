@@ -98,6 +98,9 @@ export default function ChapterReactions({ chapterId, initialCounts, initialUser
           );
         })}
       </div>
+      <p className="mt-2 max-w-sm text-center text-[10px] leading-snug text-muted-foreground">
+        Your reaction helps other readers discover this chapter and shows the author their work is landing.
+      </p>
     </div>
   );
 }

@@ -5,16 +5,18 @@ import { getCurrentProfile } from '@/lib/session';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import StatusBadge from '@/components/status-badge';
 import ChapterReaderContent from '@/components/chapter-reader-content';
 import ChapterMenu from '@/components/chapter-menu';
-import ChapterReviewThread from '@/components/chapter-review-thread';
+import ReviewThreadPreview from '@/components/review-thread-preview';
 import ApproveChapterButton from '@/components/approve-chapter-button';
 import ChapterReactions from '@/components/chapter-reactions';
 import ChapterComments from '@/components/chapter-comments';
 import CoverPlaceholder from '@/components/cover-placeholder';
-import { getChapterReviewMessages } from '@/lib/creator';
+import { getChapterReviewMessages, isThreadUnread } from '@/lib/creator';
 import { getChapterComments, getChapterReactionState } from '@/lib/social';
 import { formatRelativeTime } from '@/lib/util';
+import { CHAPTER_THREAD_KINDS } from '@/lib/thread-kinds';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,18 +60,28 @@ async function getChapter(seriesId, chapterNumber) {
   return rows[0] || null;
 }
 
+// Two index-backed range lookups instead of loading every chapter_number
+// for the series to find the immediate neighbors — matters once a series
+// has thousands of chapters.
 async function getAdjacentChapters(seriesId, chapterNumber, includeAll) {
-  const { rows } = await query(
-    `SELECT chapter_number FROM chapters
-     WHERE series_id = $1 ${includeAll ? '' : "AND status = 'published'"}
-     ORDER BY chapter_number ASC`,
-    [seriesId]
-  );
-  const numbers = rows.map((r) => Number(r.chapter_number));
-  const idx = numbers.indexOf(Number(chapterNumber));
+  const statusFilter = includeAll ? '' : "AND status = 'published'";
+  const [{ rows: prevRows }, { rows: nextRows }] = await Promise.all([
+    query(
+      `SELECT chapter_number FROM chapters
+       WHERE series_id = $1 AND chapter_number < $2 ${statusFilter}
+       ORDER BY chapter_number DESC LIMIT 1`,
+      [seriesId, chapterNumber]
+    ),
+    query(
+      `SELECT chapter_number FROM chapters
+       WHERE series_id = $1 AND chapter_number > $2 ${statusFilter}
+       ORDER BY chapter_number ASC LIMIT 1`,
+      [seriesId, chapterNumber]
+    ),
+  ]);
   return {
-    prev: idx > 0 ? numbers[idx - 1] : null,
-    next: idx >= 0 && idx < numbers.length - 1 ? numbers[idx + 1] : null,
+    prev: prevRows[0] ? Number(prevRows[0].chapter_number) : null,
+    next: nextRows[0] ? Number(nextRows[0].chapter_number) : null,
   };
 }
 
@@ -90,6 +102,9 @@ export default async function ChapterPage({ params }) {
 
   const { prev, next } = await getAdjacentChapters(series.id, params.number, canManage);
   const reviewMessages = canManage ? await getChapterReviewMessages(chapter.id) : [];
+  const reviewIsUnread = canManage
+    ? await isThreadUnread(profile.id, 'chapter', chapter.id, reviewMessages[reviewMessages.length - 1]?.created_at)
+    : false;
   const [commentsPage, reactionState] = await Promise.all([
     getChapterComments(chapter.id),
     getChapterReactionState(chapter.id, profile?.id),
@@ -134,29 +149,30 @@ export default async function ChapterPage({ params }) {
         </h1>
 
         {canManage && series.moderation_status !== 'approved' && (
-          <Card className="border-dashed">
-            <CardContent className="p-4 text-sm text-muted-foreground">
-              Series is{' '}
-              <span className="font-medium capitalize text-foreground">
-                {series.moderation_status.replace('_', ' ')}
-              </span>{' '}
-              — only visible to you.
+          <Card className="border-dashed bg-muted/40">
+            <CardContent className="flex items-center gap-3 p-4">
+              <StatusBadge status={series.moderation_status} />
+              <p className="text-sm text-muted-foreground">Series — only visible to you.</p>
             </CardContent>
           </Card>
         )}
 
         {canManage && chapter.status === 'hidden' && (
-          <Card className="border-dashed">
-            <CardContent className="p-4 text-sm text-muted-foreground">
-              Hidden — only visible to you.
+          <Card className="border-dashed bg-muted/40">
+            <CardContent className="flex items-center gap-3 p-4">
+              <StatusBadge status={chapter.status} />
+              <p className="text-sm text-muted-foreground">Only visible to you.</p>
             </CardContent>
           </Card>
         )}
 
         {canManage && chapter.status === 'pending_review' && (
-          <Card className="border-dashed">
+          <Card className="border-dashed bg-muted/40">
             <CardContent className="flex items-center justify-between gap-4 p-4">
-              <p className="text-sm text-muted-foreground">Pending review — only visible to you.</p>
+              <div className="flex items-center gap-3">
+                <StatusBadge status={chapter.status} />
+                <p className="text-sm text-muted-foreground">Only visible to you.</p>
+              </div>
               {isAdmin && (
                 <ApproveChapterButton
                   seriesId={series.id}
@@ -169,12 +185,15 @@ export default async function ChapterPage({ params }) {
         )}
 
         {canManage && chapter.status === 'rejected' && (
-          <Card className="border-dashed border-destructive/50">
+          <Card className="border-dashed border-destructive/50 bg-destructive/5">
             <CardContent className="flex items-start justify-between gap-4 p-4">
               <div>
-                <p className="text-sm font-medium text-destructive">Chapter rejected — only visible to you</p>
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={chapter.status} />
+                  <p className="text-sm font-medium text-destructive">Only visible to you</p>
+                </div>
                 {chapter.rejection_reason && (
-                  <p className="mt-1 text-sm text-muted-foreground">{chapter.rejection_reason}</p>
+                  <p className="mt-2 text-sm text-muted-foreground">{chapter.rejection_reason}</p>
                 )}
               </div>
               {isAdmin && (
@@ -210,8 +229,8 @@ export default async function ChapterPage({ params }) {
 
       <ChapterNav seriesSlug={series.canonical_slug} prev={prev} next={next} />
 
-      <Card>
-        <CardContent className="flex justify-center py-8">
+      <Card className="border-dashed">
+        <CardContent className="flex justify-center pb-4 pt-8">
           <ChapterReactions
             chapterId={chapter.id}
             initialCounts={reactionState.counts}
@@ -222,7 +241,14 @@ export default async function ChapterPage({ params }) {
       </Card>
 
       {canManage && (chapter.status !== 'published' || reviewMessages.length > 0) && (
-        <ChapterReviewThread seriesId={series.id} chapterId={chapter.id} messages={reviewMessages} />
+        <ReviewThreadPreview
+          messages={reviewMessages}
+          kindLabels={CHAPTER_THREAD_KINDS}
+          href={`/series/${series.canonical_slug}/chapter/${chapter.chapter_number}/thread`}
+          isUnread={reviewIsUnread}
+          threadType="chapter"
+          threadId={chapter.id}
+        />
       )}
 
       <div className="border-t pt-6">

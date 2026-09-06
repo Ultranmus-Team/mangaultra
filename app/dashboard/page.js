@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getCurrentProfile } from '@/lib/session';
-import { getMySeries, getUserBlockMessages } from '@/lib/creator';
+import { getMySeries, getUserBlockMessages, getThreadLastReadAt, isThreadUnread } from '@/lib/creator';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import MySeriesCard from '@/components/my-series-card';
@@ -15,6 +15,9 @@ export default async function DashboardPage() {
 
   const series = await getMySeries(profile.id);
   const blockMessages = profile.is_banned ? await getUserBlockMessages(profile.id) : [];
+  const lastReadAt = profile.is_banned ? await getThreadLastReadAt(profile.id, 'account', profile.id) : null;
+  const latestMessage = blockMessages[blockMessages.length - 1];
+  const isUnread = profile.is_banned && (await isThreadUnread(profile.id, 'account', profile.id, latestMessage?.created_at));
 
   return (
     <div className="space-y-8">
@@ -28,7 +31,18 @@ export default async function DashboardPage() {
                 below for the reason and to reach an admin.
               </p>
             </div>
-            <UserBlockThread userId={profile.id} messages={blockMessages} isAdminView={false} />
+            <UserBlockThread
+              userId={profile.id}
+              messages={blockMessages}
+              isAdminView={false}
+              unread={{
+                isUnread,
+                lastReadAt,
+                threadType: 'account',
+                threadId: profile.id,
+                extraPaths: ['/dashboard'],
+              }}
+            />
           </CardContent>
         </Card>
       )}

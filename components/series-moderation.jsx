@@ -11,15 +11,20 @@ import {
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import Dialog from '@/components/ui/dialog';
 
 // Admin-only moderation controls for the unified series page — the same
-// actions that used to live only on /admin/series/[seriesId].
+// actions that used to live only on /admin/series/[seriesId]. Approve is
+// available from any non-approved state, not just pending_review, so an
+// admin can publish a manga directly without waiting on the creator to
+// submit (or resubmit after a rejection) first.
 export default function SeriesModeration({ seriesId, moderationStatus }) {
   const router = useRouter();
   const [error, setError] = useState(null);
   const [isPending, startTransition] = useTransition();
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [reason, setReason] = useState('');
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   function run(action, ...args) {
     setError(null);
@@ -34,8 +39,12 @@ export default function SeriesModeration({ seriesId, moderationStatus }) {
     });
   }
 
-  function runDelete() {
-    if (!window.confirm('Permanently delete this series and all its chapters?')) return;
+  function closeDelete() {
+    if (isPending) return;
+    setDeleteOpen(false);
+  }
+
+  function confirmDelete() {
     setError(null);
     startTransition(async () => {
       const result = await deleteSeriesAction(seriesId);
@@ -43,7 +52,7 @@ export default function SeriesModeration({ seriesId, moderationStatus }) {
         setError(result.error);
         return;
       }
-      router.push('/admin');
+      router.push('/admin/manga');
     });
   }
 
@@ -55,27 +64,27 @@ export default function SeriesModeration({ seriesId, moderationStatus }) {
       <CardContent className="space-y-3">
         {error && <p className="text-sm text-destructive">{error}</p>}
         <div className="flex flex-wrap gap-2">
-          {moderationStatus === 'pending_review' && (
-            <>
-              <Button size="sm" disabled={isPending} onClick={() => run(approveSeriesAction)}>
-                Approve
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={isPending}
-                onClick={() => setShowRejectForm((v) => !v)}
-              >
-                Reject
-              </Button>
-            </>
+          {moderationStatus !== 'approved' && (
+            <Button size="sm" disabled={isPending} onClick={() => run(approveSeriesAction)}>
+              Approve
+            </Button>
+          )}
+          {moderationStatus !== 'approved' && moderationStatus !== 'rejected' && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={isPending}
+              onClick={() => setShowRejectForm((v) => !v)}
+            >
+              Reject
+            </Button>
           )}
           {moderationStatus === 'approved' && (
             <Button size="sm" variant="outline" disabled={isPending} onClick={() => run(delistSeriesAction)}>
               Delist
             </Button>
           )}
-          <Button size="sm" variant="destructive" disabled={isPending} onClick={runDelete}>
+          <Button size="sm" variant="destructive" disabled={isPending} onClick={() => setDeleteOpen(true)}>
             Delete
           </Button>
         </div>
@@ -99,6 +108,21 @@ export default function SeriesModeration({ seriesId, moderationStatus }) {
           </div>
         )}
       </CardContent>
+
+      <Dialog open={deleteOpen} onClose={closeDelete} title="Delete series?">
+        <p className="text-sm text-muted-foreground">
+          This permanently deletes the series and all its chapters. This cannot be undone.
+        </p>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" disabled={isPending} onClick={closeDelete}>
+            Cancel
+          </Button>
+          <Button variant="destructive" disabled={isPending} onClick={confirmDelete}>
+            {isPending ? 'Deleting…' : 'Delete series'}
+          </Button>
+        </div>
+      </Dialog>
     </Card>
   );
 }

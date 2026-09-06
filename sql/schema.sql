@@ -124,6 +124,23 @@ CREATE TABLE IF NOT EXISTS user_block_messages (
 );
 CREATE INDEX IF NOT EXISTS idx_user_block_messages_user_id ON user_block_messages(user_id);
 
+-- Read/unread tracking for the three thread types above, per viewer — a
+-- thread has no single "read" state since the author and an admin (or two
+-- different admins) can each have their own last-seen point in the same
+-- conversation. A message is unread for a user if it postdates their row
+-- here (or no row exists at all, meaning nothing has ever been read).
+CREATE TABLE IF NOT EXISTS thread_read_states (
+    id SERIAL PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    thread_type VARCHAR(20) NOT NULL CHECK (thread_type IN ('chapter', 'series', 'account')),
+    -- TEXT, not INT: chapter/series threads key off a serial id, but
+    -- account threads key off the (UUID) profile id.
+    thread_id TEXT NOT NULL,
+    last_read_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id, thread_type, thread_id)
+);
+CREATE INDEX IF NOT EXISTS idx_thread_read_states_lookup ON thread_read_states(user_id, thread_type, thread_id);
+
 -- Public per-chapter discussion, open to any logged-in reader (unlike the
 -- private chapter_review_messages thread above). One level of threading —
 -- replies always point at a top-level comment, Instagram-style, so

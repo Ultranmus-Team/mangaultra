@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { getCurrentProfile } from '@/lib/session';
 import { getUserById, getAllSeries } from '@/lib/admin';
-import { getUserBlockMessages } from '@/lib/creator';
+import { getUserBlockMessages, getThreadLastReadAt, isThreadUnread } from '@/lib/creator';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import BlockUserButton from '@/components/block-user-button';
@@ -15,11 +16,15 @@ export default async function AdminUserPage({ params }) {
   const user = await getUserById(params.userId);
   if (!user) notFound();
 
-  const [messages, allSeries] = await Promise.all([
+  const [profile, messages, allSeries] = await Promise.all([
+    getCurrentProfile(),
     getUserBlockMessages(user.id),
     getAllSeries(),
   ]);
   const series = allSeries.filter((s) => s.creator_id === user.id);
+  const lastReadAt = messages.length > 0 ? await getThreadLastReadAt(profile.id, 'account', user.id) : null;
+  const latestMessage = messages[messages.length - 1];
+  const isUnread = await isThreadUnread(profile.id, 'account', user.id, latestMessage?.created_at);
 
   return (
     <div className="space-y-8">
@@ -44,7 +49,18 @@ export default async function AdminUserPage({ params }) {
       </div>
 
       {(user.is_banned || messages.length > 0) && (
-        <UserBlockThread userId={user.id} messages={messages} isAdminView />
+        <UserBlockThread
+          userId={user.id}
+          messages={messages}
+          isAdminView
+          unread={{
+            isUnread,
+            lastReadAt,
+            threadType: 'account',
+            threadId: user.id,
+            extraPaths: [`/admin/users/${user.id}`],
+          }}
+        />
       )}
 
       <div className="space-y-2">

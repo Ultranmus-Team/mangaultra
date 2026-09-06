@@ -182,9 +182,10 @@ export async function sendChapterMessageAction(seriesId, chapterId, prevState, f
   const body = formData.get('body');
   const imageFile = formData.get('image');
 
+  let message;
   try {
     const imageBuffer = imageFile && imageFile.size > 0 ? Buffer.from(await imageFile.arrayBuffer()) : null;
-    await creator.addChapterReviewMessage(profile.id, profile.role === 'admin', seriesId, chapterId, {
+    message = await creator.addChapterReviewMessage(profile.id, profile.role === 'admin', seriesId, chapterId, {
       body,
       imageBuffer,
     });
@@ -192,7 +193,7 @@ export async function sendChapterMessageAction(seriesId, chapterId, prevState, f
     return { error: err.message };
   }
   revalidateSeries(await slugForSeries(seriesId));
-  return { success: true };
+  return { success: true, message };
 }
 
 export async function resubmitChapterAction(seriesId, chapterId, prevState, formData) {
@@ -245,14 +246,15 @@ export async function sendSeriesMessageAction(seriesId, prevState, formData) {
   const body = formData.get('body');
   const imageFile = formData.get('image');
 
+  let message;
   try {
     const imageBuffer = imageFile && imageFile.size > 0 ? Buffer.from(await imageFile.arrayBuffer()) : null;
-    await creator.addSeriesReviewMessage(profile.id, profile.role === 'admin', seriesId, { body, imageBuffer });
+    message = await creator.addSeriesReviewMessage(profile.id, profile.role === 'admin', seriesId, { body, imageBuffer });
   } catch (err) {
     return { error: err.message };
   }
   revalidateSeries(await slugForSeries(seriesId));
-  return { success: true };
+  return { success: true, message };
 }
 
 // A blocked user's only channel back to an admin — posting here is exempt
@@ -262,12 +264,74 @@ export async function sendMyBlockMessageAction(prevState, formData) {
   const body = formData.get('body');
   const imageFile = formData.get('image');
 
+  let message;
   try {
     const imageBuffer = imageFile && imageFile.size > 0 ? Buffer.from(await imageFile.arrayBuffer()) : null;
-    await creator.addUserBlockMessage(profile.id, false, profile.id, { body, imageBuffer });
+    message = await creator.addUserBlockMessage(profile.id, false, profile.id, { body, imageBuffer });
   } catch (err) {
     return { error: err.message };
   }
   revalidatePath('/dashboard');
+  return { success: true, message };
+}
+
+// Cursor-style "load more" for the review thread's reverse-infinite-scroll
+// history — scrolling to the top of an already-open thread fetches the next
+// older chunk instead of the whole thread ever being paginated by URL.
+export async function loadOlderChapterMessagesAction(chapterId, offset, limit) {
+  const profile = await requireProfile();
+  const { rows } = await query(
+    `SELECT s.creator_id FROM chapters c JOIN series s ON s.id = c.series_id WHERE c.id = $1`,
+    [chapterId]
+  );
+  const chapter = rows[0];
+  if (!chapter) return { error: 'Chapter not found.' };
+  if (profile.id !== chapter.creator_id && profile.role !== 'admin') {
+    return { error: 'Not authorized.' };
+  }
+  const messages = await creator.getChapterReviewMessages(chapterId, { limit, offset });
+  return { messages };
+}
+
+export async function loadOlderSeriesMessagesAction(seriesId, offset, limit) {
+  const profile = await requireProfile();
+  const { rows } = await query('SELECT creator_id FROM series WHERE id = $1', [seriesId]);
+  const series = rows[0];
+  if (!series) return { error: 'Series not found.' };
+  if (profile.id !== series.creator_id && profile.role !== 'admin') {
+    return { error: 'Not authorized.' };
+  }
+  const messages = await creator.getSeriesReviewMessages(seriesId, { limit, offset });
+  return { messages };
+}
+
+const THREAD_TYPES = ['chapter', 'series', 'account'];
+
+// Marking a thread read is always about the caller's own view of it — no
+// ownership/admin check needed beyond being logged in, since "read" is
+// per-viewer, not a property of the thread itself.
+// `extraPaths` lets the caller also invalidate the pages that show this
+// thread's unread state elsewhere (the manga/chapter page's inline preview,
+// the thread page itself) — revalidatePath only works from a Server Action
+// or Route Handler, never during a page's own render, which is exactly why
+// the dedicated /thread pages call this via a client-triggered effect
+// instead of marking read directly in their render.
+export async function markThreadReadAction(threadType, threadId, extraPaths = []) {
+  const profile = await requireProfile();
+  if (!THREAD_TYPES.includes(threadType)) {
+    return { error: 'Invalid thread type.' };
+  }
+
+  try {
+    // threadId is a chapter/series serial id (chapter/series) or a profile
+    // UUID (account) — thread_id is stored as TEXT precisely so both fit,
+    // so pass it through as-is rather than coercing to Number.
+    await creator.markThreadRead(profile.id, threadType, threadId);
+  } catch (err) {
+    return { error: err.message };
+  }
+  revalidatePath('/dashboard/threads');
+  revalidatePath('/admin/threads');
+  for (const p of extraPaths) revalidatePath(p);
   return { success: true };
 }

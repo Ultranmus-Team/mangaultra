@@ -1,20 +1,18 @@
 'use client';
 
 import ReviewThread from '@/components/review-thread';
-import { sendChapterMessageAction } from '@/app/dashboard/actions';
+import { sendChapterMessageAction, loadOlderChapterMessagesAction } from '@/app/dashboard/actions';
+import { CHAPTER_THREAD_KINDS } from '@/lib/thread-kinds';
 
-const KIND_LABEL = {
-  resubmit: 'Resubmitted for review',
-  reject: 'Rejected',
-  approve: 'Approved',
-};
-
-export default function ChapterReviewThread({ seriesId, chapterId, messages }) {
+export default function ChapterReviewThread({ seriesId, chapterId, messages, initialOffset, unread }) {
   return (
     <ReviewThread
       messages={messages}
-      kindLabels={KIND_LABEL}
+      kindLabels={CHAPTER_THREAD_KINDS}
+      initialOffset={initialOffset}
+      unread={unread}
       onSend={(formData) => sendChapterMessageAction(seriesId, chapterId, null, formData)}
+      onLoadOlder={(offset, limit) => loadOlderChapterMessagesAction(chapterId, offset, limit)}
     />
   );
 }

@@ -1,21 +1,18 @@
 'use client';
 
 import ReviewThread from '@/components/review-thread';
-import { sendSeriesMessageAction } from '@/app/dashboard/actions';
+import { sendSeriesMessageAction, loadOlderSeriesMessagesAction } from '@/app/dashboard/actions';
+import { SERIES_THREAD_KINDS } from '@/lib/thread-kinds';
 
-const KIND_LABEL = {
-  resubmit: 'Resubmitted for review',
-  reject: 'Rejected',
-  approve: 'Approved',
-  delist: 'Delisted',
-};
-
-export default function SeriesReviewThread({ seriesId, messages }) {
+export default function SeriesReviewThread({ seriesId, messages, initialOffset, unread }) {
   return (
     <ReviewThread
       messages={messages}
-      kindLabels={KIND_LABEL}
+      kindLabels={SERIES_THREAD_KINDS}
+      initialOffset={initialOffset}
+      unread={unread}
       onSend={(formData) => sendSeriesMessageAction(seriesId, null, formData)}
+      onLoadOlder={(offset, limit) => loadOlderSeriesMessagesAction(seriesId, offset, limit)}
     />
   );
 }
