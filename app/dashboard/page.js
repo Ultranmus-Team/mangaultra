@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getCurrentProfile } from '@/lib/session';
-import { getMySeries } from '@/lib/creator';
+import { getMySeries, getUserBlockMessages } from '@/lib/creator';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import MySeriesCard from '@/components/my-series-card';
+import UserBlockThread from '@/components/user-block-thread';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,9 +14,25 @@ export default async function DashboardPage() {
   if (!profile) redirect('/login');
 
   const series = await getMySeries(profile.id);
+  const blockMessages = profile.is_banned ? await getUserBlockMessages(profile.id) : [];
 
   return (
     <div className="space-y-8">
+      {profile.is_banned && (
+        <Card className="border-dashed border-destructive/50">
+          <CardContent className="space-y-4 p-4">
+            <div>
+              <p className="text-sm font-medium text-destructive">Your account has been blocked</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                You can't create new series, chapters, or comments. You can still manage what you already have. See
+                below for the reason and to reach an admin.
+              </p>
+            </div>
+            <UserBlockThread userId={profile.id} messages={blockMessages} isAdminView={false} />
+          </CardContent>
+        </Card>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Your series</h1>

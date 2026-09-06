@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 import { getCurrentProfile } from '@/lib/session';
 import { query } from '@/lib/db';
 import * as admin from '@/lib/admin';
+import * as creator from '@/lib/creator';
 
 async function requireAdmin() {
   const profile = await getCurrentProfile();
@@ -19,15 +20,16 @@ async function slugForSeries(seriesId) {
 }
 
 function revalidateAdminViews(slug) {
-  revalidatePath('/admin');
+  revalidatePath('/admin/manga');
+  revalidatePath('/admin/chapters');
   if (slug) revalidatePath(`/series/${slug}`);
 }
 
 export async function approveSeriesAction(seriesId) {
-  await requireAdmin();
+  const profile = await requireAdmin();
   const slug = await slugForSeries(seriesId);
   try {
-    await admin.approveSeries(seriesId);
+    await admin.approveSeries(profile.id, seriesId);
   } catch (err) {
     return { error: err.message };
   }
@@ -36,10 +38,10 @@ export async function approveSeriesAction(seriesId) {
 }
 
 export async function rejectSeriesAction(seriesId, reason) {
-  await requireAdmin();
+  const profile = await requireAdmin();
   const slug = await slugForSeries(seriesId);
   try {
-    await admin.rejectSeries(seriesId, reason);
+    await admin.rejectSeries(profile.id, seriesId, reason);
   } catch (err) {
     return { error: err.message };
   }
@@ -47,11 +49,39 @@ export async function rejectSeriesAction(seriesId, reason) {
   return { success: true };
 }
 
+export async function rejectChapterAction(seriesId, chapterId, reason) {
+  const profile = await requireAdmin();
+  let result;
+  try {
+    result = await admin.rejectChapter(profile.id, seriesId, chapterId, reason);
+  } catch (err) {
+    return { error: err.message };
+  }
+  const slug = await slugForSeries(seriesId);
+  revalidateAdminViews(slug);
+  if (slug) revalidatePath(`/series/${slug}/chapter/${result.chapter_number}`);
+  return { success: true };
+}
+
+export async function approveChapterAction(seriesId, chapterId, note) {
+  const profile = await requireAdmin();
+  let result;
+  try {
+    result = await admin.approveChapter(profile.id, seriesId, chapterId, note);
+  } catch (err) {
+    return { error: err.message };
+  }
+  const slug = await slugForSeries(seriesId);
+  revalidateAdminViews(slug);
+  if (slug) revalidatePath(`/series/${slug}/chapter/${result.chapter_number}`);
+  return { success: true };
+}
+
 export async function delistSeriesAction(seriesId) {
-  await requireAdmin();
+  const profile = await requireAdmin();
   const slug = await slugForSeries(seriesId);
   try {
-    await admin.delistSeries(seriesId);
+    await admin.delistSeries(profile.id, seriesId);
   } catch (err) {
     return { error: err.message };
   }
@@ -66,7 +96,47 @@ export async function deleteSeriesAction(seriesId) {
   } catch (err) {
     return { error: err.message };
   }
-  revalidatePath('/admin');
+  revalidatePath('/admin/manga');
+  return { success: true };
+}
+
+export async function blockUserAction(userId, reason, hidePublished) {
+  const profile = await requireAdmin();
+  try {
+    await admin.blockUser(profile.id, userId, { reason, hidePublished });
+  } catch (err) {
+    return { error: err.message };
+  }
+  revalidatePath('/admin/users');
+  revalidatePath(`/admin/users/${userId}`);
+  revalidatePath('/admin/manga');
+  return { success: true };
+}
+
+export async function unblockUserAction(userId) {
+  const profile = await requireAdmin();
+  try {
+    await admin.unblockUser(profile.id, userId);
+  } catch (err) {
+    return { error: err.message };
+  }
+  revalidatePath('/admin/users');
+  revalidatePath(`/admin/users/${userId}`);
+  return { success: true };
+}
+
+export async function sendUserBlockMessageAction(userId, prevState, formData) {
+  const profile = await requireAdmin();
+  const body = formData.get('body');
+  const imageFile = formData.get('image');
+
+  try {
+    const imageBuffer = imageFile && imageFile.size > 0 ? Buffer.from(await imageFile.arrayBuffer()) : null;
+    await creator.addUserBlockMessage(profile.id, true, userId, { body, imageBuffer });
+  } catch (err) {
+    return { error: err.message };
+  }
+  revalidatePath(`/admin/users/${userId}`);
   return { success: true };
 }
 

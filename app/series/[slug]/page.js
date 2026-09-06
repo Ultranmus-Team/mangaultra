@@ -11,6 +11,9 @@ import StatusBadge from '@/components/status-badge';
 import SubmitForReviewButton from '@/components/submit-for-review-button';
 import SeriesModeration from '@/components/series-moderation';
 import ChapterMenu from '@/components/chapter-menu';
+import SeriesReviewThread from '@/components/series-review-thread';
+import { formatRelativeTime } from '@/lib/util';
+import { getSeriesReviewMessages } from '@/lib/creator';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,6 +54,7 @@ export default async function SeriesPage({ params }) {
   const { minChaptersForApproval } = isOwner ? await getPlatformSettings() : { minChaptersForApproval: 0 };
   const canSubmit =
     isOwner && ['draft', 'rejected'].includes(series.moderation_status) && chapters.length >= minChaptersForApproval;
+  const reviewMessages = canManage ? await getSeriesReviewMessages(series.id) : [];
 
   return (
     <div className="space-y-8">
@@ -105,7 +109,11 @@ export default async function SeriesPage({ params }) {
                   {chapters.length} / {minChaptersForApproval} chapters uploaded.{' '}
                   {canSubmit ? 'Ready to submit for review.' : `Upload ${minChaptersForApproval - chapters.length} more to submit.`}
                 </p>
-                <SubmitForReviewButton seriesId={series.id} disabled={!canSubmit} />
+                <SubmitForReviewButton
+                  seriesId={series.id}
+                  disabled={!canSubmit}
+                  isResubmit={series.moderation_status === 'rejected'}
+                />
               </CardContent>
             </Card>
           )}
@@ -116,6 +124,10 @@ export default async function SeriesPage({ params }) {
                 Awaiting admin review. New chapters can still be uploaded and will publish immediately once approved.
               </CardContent>
             </Card>
+          )}
+
+          {canManage && (!['approved', 'draft'].includes(series.moderation_status) || reviewMessages.length > 0) && (
+            <SeriesReviewThread seriesId={series.id} messages={reviewMessages} />
           )}
 
           <div className="space-y-2">
@@ -139,11 +151,13 @@ export default async function SeriesPage({ params }) {
                     >
                       Chapter {c.chapter_number}
                       {c.title ? ` — ${c.title}` : ''}
-                      {c.status === 'hidden' && <span className="ml-2 text-xs font-normal text-muted-foreground">(hidden)</span>}
+                      {c.status !== 'published' && (
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">({c.status})</span>
+                      )}
                     </Link>
                     <div className="flex items-center gap-2">
                       <span className="text-muted-foreground">
-                        {canManage ? c.status : new Date(c.created_at).toLocaleDateString()}
+                        {canManage ? c.status : formatRelativeTime(c.created_at)}
                       </span>
                       {canManage && (
                         <ChapterMenu
@@ -151,7 +165,9 @@ export default async function SeriesPage({ params }) {
                           seriesSlug={series.canonical_slug}
                           chapterId={c.id}
                           chapterNumber={c.chapter_number}
-                          hidden={c.status === 'hidden'}
+                          status={c.status}
+                          isOwner={isOwner}
+                          isAdmin={isAdmin}
                         />
                       )}
                     </div>

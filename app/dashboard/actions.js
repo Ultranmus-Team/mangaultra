@@ -2,24 +2,24 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabaseServer';
 import { getCurrentProfile } from '@/lib/session';
 import { query } from '@/lib/db';
 import * as creator from '@/lib/creator';
-
-async function requireUserId() {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect('/login');
-  return user.id;
-}
 
 async function requireProfile() {
   const profile = await getCurrentProfile();
   if (!profile) redirect('/login');
   return profile;
+}
+
+// A blocked account keeps read/manage access to what it already has (it can
+// still hide/delete its own chapters, or appeal in its block thread) but
+// can't create anything new or post publicly — checked at each of those
+// entry points rather than in requireProfile itself.
+function assertNotBanned(profile) {
+  if (profile.is_banned) {
+    throw new Error('Your account has been blocked from posting. See your dashboard for details.');
+  }
 }
 
 async function slugForSeries(seriesId) {
@@ -33,7 +33,7 @@ function revalidateSeries(slug) {
 }
 
 export async function createSeriesAction(prevState, formData) {
-  const userId = await requireUserId();
+  const profile = await requireProfile();
   const title = formData.get('title');
   const contentType = formData.get('contentType');
   const description = formData.get('description');
@@ -46,9 +46,10 @@ export async function createSeriesAction(prevState, formData) {
 
   let series;
   try {
+    assertNotBanned(profile);
     const coverImageBuffer =
       coverImageFile && coverImageFile.size > 0 ? Buffer.from(await coverImageFile.arrayBuffer()) : null;
-    series = await creator.createSeries(userId, { title, contentType, description, tags, coverImageBuffer });
+    series = await creator.createSeries(profile.id, { title, contentType, description, tags, coverImageBuffer });
   } catch (err) {
     return { error: err.message };
   }
@@ -62,7 +63,7 @@ export async function createSeriesAction(prevState, formData) {
 // prevState parameter below is required for the arguments to line up;
 // dropping it silently shifts formData into prevState's slot.
 export async function addMangaChapterAction(seriesId, prevState, formData) {
-  const userId = await requireUserId();
+  const profile = await requireProfile();
   const chapterNumber = formData.get('chapterNumber');
   const title = formData.get('title');
   const files = formData.getAll('pages').filter((f) => f && f.size > 0);
@@ -72,8 +73,9 @@ export async function addMangaChapterAction(seriesId, prevState, formData) {
   }
 
   try {
+    assertNotBanned(profile);
     const pageBuffers = await Promise.all(files.map(async (f) => Buffer.from(await f.arrayBuffer())));
-    await creator.addMangaChapter(userId, seriesId, { chapterNumber, title, pageBuffers });
+    await creator.addMangaChapter(profile.id, seriesId, { chapterNumber, title, pageBuffers });
   } catch (err) {
     return { error: err.message };
   }
@@ -83,7 +85,7 @@ export async function addMangaChapterAction(seriesId, prevState, formData) {
 }
 
 export async function addNovelChapterAction(seriesId, prevState, formData) {
-  const userId = await requireUserId();
+  const profile = await requireProfile();
   const chapterNumber = formData.get('chapterNumber');
   const title = formData.get('title');
   const body = formData.get('body');
@@ -93,7 +95,8 @@ export async function addNovelChapterAction(seriesId, prevState, formData) {
   }
 
   try {
-    await creator.addNovelChapter(userId, seriesId, { chapterNumber, title, body });
+    assertNotBanned(profile);
+    await creator.addNovelChapter(profile.id, seriesId, { chapterNumber, title, body });
   } catch (err) {
     return { error: err.message };
   }
@@ -163,6 +166,50 @@ export async function updateNovelChapterAction(seriesId, chapterId, prevState, f
   return { success: true };
 }
 
+export async function deleteChapterAction(seriesId, chapterId) {
+  const profile = await requireProfile();
+  try {
+    await creator.deleteChapter(profile.id, profile.role === 'admin', seriesId, chapterId);
+  } catch (err) {
+    return { error: err.message };
+  }
+  revalidateSeries(await slugForSeries(seriesId));
+  return { success: true };
+}
+
+export async function sendChapterMessageAction(seriesId, chapterId, prevState, formData) {
+  const profile = await requireProfile();
+  const body = formData.get('body');
+  const imageFile = formData.get('image');
+
+  try {
+    const imageBuffer = imageFile && imageFile.size > 0 ? Buffer.from(await imageFile.arrayBuffer()) : null;
+    await creator.addChapterReviewMessage(profile.id, profile.role === 'admin', seriesId, chapterId, {
+      body,
+      imageBuffer,
+    });
+  } catch (err) {
+    return { error: err.message };
+  }
+  revalidateSeries(await slugForSeries(seriesId));
+  return { success: true };
+}
+
+export async function resubmitChapterAction(seriesId, chapterId, prevState, formData) {
+  const profile = await requireProfile();
+  const body = formData.get('body');
+  const imageFile = formData.get('image');
+
+  try {
+    const imageBuffer = imageFile && imageFile.size > 0 ? Buffer.from(await imageFile.arrayBuffer()) : null;
+    await creator.resubmitChapter(profile.id, seriesId, chapterId, { body, imageBuffer });
+  } catch (err) {
+    return { error: err.message };
+  }
+  revalidateSeries(await slugForSeries(seriesId));
+  return { success: true };
+}
+
 export async function setChapterVisibilityAction(seriesId, chapterId, hidden) {
   const profile = await requireProfile();
   let result;
@@ -177,13 +224,50 @@ export async function setChapterVisibilityAction(seriesId, chapterId, hidden) {
   return { success: true };
 }
 
-export async function submitForApprovalAction(seriesId) {
-  const userId = await requireUserId();
+export async function submitForApprovalAction(seriesId, prevState, formData) {
+  const profile = await requireProfile();
+  const body = formData?.get('body');
+  const imageFile = formData?.get('image');
+
   try {
-    await creator.submitForApproval(userId, seriesId);
+    assertNotBanned(profile);
+    const imageBuffer = imageFile && imageFile.size > 0 ? Buffer.from(await imageFile.arrayBuffer()) : null;
+    await creator.submitForApproval(profile.id, seriesId, { body, imageBuffer });
   } catch (err) {
     return { error: err.message };
   }
   revalidateSeries(await slugForSeries(seriesId));
+  return { success: true };
+}
+
+export async function sendSeriesMessageAction(seriesId, prevState, formData) {
+  const profile = await requireProfile();
+  const body = formData.get('body');
+  const imageFile = formData.get('image');
+
+  try {
+    const imageBuffer = imageFile && imageFile.size > 0 ? Buffer.from(await imageFile.arrayBuffer()) : null;
+    await creator.addSeriesReviewMessage(profile.id, profile.role === 'admin', seriesId, { body, imageBuffer });
+  } catch (err) {
+    return { error: err.message };
+  }
+  revalidateSeries(await slugForSeries(seriesId));
+  return { success: true };
+}
+
+// A blocked user's only channel back to an admin — posting here is exempt
+// from assertNotBanned since it's an appeal, not new content.
+export async function sendMyBlockMessageAction(prevState, formData) {
+  const profile = await requireProfile();
+  const body = formData.get('body');
+  const imageFile = formData.get('image');
+
+  try {
+    const imageBuffer = imageFile && imageFile.size > 0 ? Buffer.from(await imageFile.arrayBuffer()) : null;
+    await creator.addUserBlockMessage(profile.id, false, profile.id, { body, imageBuffer });
+  } catch (err) {
+    return { error: err.message };
+  }
+  revalidatePath('/dashboard');
   return { success: true };
 }
