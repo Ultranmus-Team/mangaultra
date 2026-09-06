@@ -20,7 +20,14 @@ export default function MangaChapterEditor({ seriesId, seriesSlug, initialChapte
   const [step, setStep] = useState('edit');
   const [chapterNumber, setChapterNumber] = useState(initialChapter?.chapterNumber?.toString() ?? '');
   const [title, setTitle] = useState(initialChapter?.title ?? '');
-  const [pages, setPages] = useState([]);
+  const [pages, setPages] = useState(() =>
+    (initialChapter?.pages ?? []).map((p) => ({
+      id: nextId++,
+      kind: 'existing',
+      storagePath: p.storagePath,
+      url: p.url,
+    }))
+  );
   const [error, setError] = useState(null);
   const [isPending, startTransition] = useTransition();
   const [draggingIndex, setDraggingIndex] = useState(null);
@@ -28,7 +35,7 @@ export default function MangaChapterEditor({ seriesId, seriesSlug, initialChapte
 
   useEffect(() => {
     // Revoke object URLs on unmount so we don't leak memory.
-    return () => pages.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+    return () => pages.forEach((p) => p.kind === 'new' && URL.revokeObjectURL(p.previewUrl));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -36,6 +43,7 @@ export default function MangaChapterEditor({ seriesId, seriesSlug, initialChapte
     const files = Array.from(fileList).filter((f) => f.type.startsWith('image/'));
     const newPages = files.map((file) => ({
       id: nextId++,
+      kind: 'new',
       file,
       previewUrl: URL.createObjectURL(file),
     }));
@@ -45,7 +53,7 @@ export default function MangaChapterEditor({ seriesId, seriesSlug, initialChapte
   function removePage(id) {
     setPages((prev) => {
       const target = prev.find((p) => p.id === id);
-      if (target) URL.revokeObjectURL(target.previewUrl);
+      if (target?.kind === 'new') URL.revokeObjectURL(target.previewUrl);
       return prev.filter((p) => p.id !== id);
     });
   }
@@ -111,7 +119,16 @@ export default function MangaChapterEditor({ seriesId, seriesSlug, initialChapte
     const formData = new FormData();
     formData.set('chapterNumber', chapterNumber);
     formData.set('title', title);
-    pages.forEach((p) => formData.append('pages', p.file));
+
+    if (isEditing) {
+      const manifest = pages.map((p) =>
+        p.kind === 'existing' ? { type: 'existing', storagePath: p.storagePath } : { type: 'new' }
+      );
+      formData.set('manifest', JSON.stringify(manifest));
+      pages.filter((p) => p.kind === 'new').forEach((p) => formData.append('newFiles', p.file));
+    } else {
+      pages.forEach((p) => formData.append('pages', p.file));
+    }
 
     startTransition(async () => {
       const result = isEditing
@@ -154,7 +171,7 @@ export default function MangaChapterEditor({ seriesId, seriesSlug, initialChapte
           <Label>Page images</Label>
           {isEditing && (
             <p className="text-xs text-muted-foreground">
-              Add the full set of pages again — saving replaces the chapter's existing pages entirely.
+              Existing pages are shown below — remove or reorder them, or add new ones.
             </p>
           )}
           <button
@@ -202,7 +219,11 @@ export default function MangaChapterEditor({ seriesId, seriesSlug, initialChapte
                   )}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={p.previewUrl} alt={`Page ${index + 1}`} className="aspect-[2/3] w-full object-cover" />
+                  <img
+                    src={p.kind === 'existing' ? p.url : p.previewUrl}
+                    alt={`Page ${index + 1}`}
+                    className="aspect-[2/3] w-full object-cover"
+                  />
                   <span className="absolute left-1.5 top-1.5 rounded bg-background/90 px-1.5 py-0.5 text-xs font-medium">
                     {index + 1}
                   </span>
@@ -258,7 +279,12 @@ export default function MangaChapterEditor({ seriesId, seriesSlug, initialChapte
             <div className="flex flex-col gap-2">
               {pages.map((p, index) => (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img key={p.id} src={p.previewUrl} alt={`Page ${index + 1}`} className="w-full rounded-md border" />
+                <img
+                  key={p.id}
+                  src={p.kind === 'existing' ? p.url : p.previewUrl}
+                  alt={`Page ${index + 1}`}
+                  className="w-full rounded-md border"
+                />
               ))}
             </div>
           </div>

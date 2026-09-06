@@ -106,18 +106,26 @@ export async function updateMangaChapterAction(seriesId, chapterId, prevState, f
   const profile = await requireProfile();
   const chapterNumber = formData.get('chapterNumber');
   const title = formData.get('title');
-  const files = formData.getAll('pages').filter((f) => f && f.size > 0);
 
-  if (files.length === 0) {
+  let manifest;
+  try {
+    manifest = JSON.parse(formData.get('manifest') || '[]');
+  } catch {
+    return { error: 'Invalid page order data.' };
+  }
+  if (!Array.isArray(manifest) || manifest.length === 0) {
     return { error: 'At least one page image is required.' };
   }
 
+  const newFiles = formData.getAll('newFiles').filter((f) => f && f.size > 0);
+
   try {
-    const pageBuffers = await Promise.all(files.map(async (f) => Buffer.from(await f.arrayBuffer())));
+    const newFileBuffers = await Promise.all(newFiles.map(async (f) => Buffer.from(await f.arrayBuffer())));
     await creator.updateMangaChapter(profile.id, profile.role === 'admin', seriesId, chapterId, {
       chapterNumber,
       title,
-      pageBuffers,
+      manifest,
+      newFileBuffers,
     });
   } catch (err) {
     return { error: err.message };

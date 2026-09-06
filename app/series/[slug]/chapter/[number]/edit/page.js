@@ -26,11 +26,21 @@ export default async function EditChapterPage({ params }) {
   const chapter = chapterRows[0];
   if (!chapter) notFound();
 
+  let pages = [];
+  if (series.content_type === 'manga') {
+    const { rows: pageRows } = await query(
+      'SELECT storage_path, cdn_image_url FROM chapter_pages WHERE chapter_id = $1 ORDER BY page_number ASC',
+      [chapter.id]
+    );
+    pages = pageRows.map((p) => ({ storagePath: p.storage_path, url: p.cdn_image_url }));
+  }
+
   const initialChapter = {
     id: chapter.id,
     chapterNumber: chapter.chapter_number,
     title: chapter.title || '',
     body: chapter.body || '',
+    pages,
   };
 
   return (
