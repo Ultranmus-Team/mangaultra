@@ -235,7 +235,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
     type VARCHAR(30) NOT NULL CHECK (type IN (
         'new_manga', 'new_chapter', 'thread_message', 'comment_reply',
-        'new_follower', 'reaction', 'admin_notice', 'new_comment'
+        'new_follower', 'reaction', 'admin_notice', 'new_comment', 'series_follower'
     )),
     actor_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
     series_id INT REFERENCES series(id) ON DELETE CASCADE,
@@ -262,14 +262,15 @@ CREATE TABLE IF NOT EXISTS notifications (
 CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id) WHERE read_at IS NULL;
 
--- Re-running against a database created before 'new_comment' existed (a
--- creator being notified about any new comment on their chapter, not just a
--- reply to their own comment — see addChapterComment in lib/social.js).
+-- Re-running against a database created before 'new_comment'/'series_follower'
+-- existed (a creator notified about any new comment on their chapter, not
+-- just a reply to their own comment, and about someone following one of
+-- their specific series — see lib/social.js and lib/follows.js).
 ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
 ALTER TABLE notifications ADD CONSTRAINT notifications_type_check
     CHECK (type IN (
         'new_manga', 'new_chapter', 'thread_message', 'comment_reply',
-        'new_follower', 'reaction', 'admin_notice', 'new_comment'
+        'new_follower', 'reaction', 'admin_notice', 'new_comment', 'series_follower'
     ));
 
 -- Re-running against a database created before the self-notification CHECK

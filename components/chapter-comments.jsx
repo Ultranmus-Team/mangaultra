@@ -160,13 +160,9 @@ export function CommentBody({ comment, canDelete, chapterId, onDeleted, actions 
       />
       <div className="min-w-0 flex-1 space-y-1">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          {comment.isAdminIdentity ? (
-            <span className="font-medium text-foreground">{comment.author_username}</span>
-          ) : (
-            <Link href={`/u/${comment.author_username}`} className="font-medium text-foreground hover:underline">
-              {comment.author_username}
-            </Link>
-          )}
+          <Link href={`/u/${comment.author_username}`} className="font-medium text-foreground hover:underline">
+            {comment.author_username}
+          </Link>
           <span>{formatRelativeTime(comment.created_at)}</span>
         </div>
         {comment.body && <p className="whitespace-pre-wrap text-sm">{comment.body}</p>}
