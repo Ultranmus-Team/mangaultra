@@ -17,7 +17,7 @@ import ReviewThreadPreview from '@/components/review-thread-preview';
 import { formatRelativeTime } from '@/lib/util';
 import { getSeriesReviewMessages, isThreadUnread } from '@/lib/creator';
 import { SERIES_THREAD_KINDS } from '@/lib/thread-kinds';
-import { getSeriesFollowState } from '@/lib/follows';
+import { getSeriesFollowState, getSeriesFollowerCount } from '@/lib/follows';
 import FollowSeriesButton from '@/components/follow-series-button';
 
 export const dynamic = 'force-dynamic';
@@ -75,6 +75,7 @@ export default async function SeriesPage({ params, searchParams }) {
   const isAdmin = profile?.role === 'admin';
   const canManage = isOwner || isAdmin;
   const followState = !isOwner && profile ? await getSeriesFollowState(profile.id, series.id) : null;
+  const followerCount = await getSeriesFollowerCount(series.id);
 
   if (series.moderation_status !== 'approved' && !canManage) notFound();
 
@@ -137,6 +138,9 @@ export default async function SeriesPage({ params, searchParams }) {
         <div className="space-y-6">
           <div className="space-y-2">
             <h1 className="text-3xl font-semibold tracking-tight">{series.title}</h1>
+            <p className="text-xs text-muted-foreground">
+              {followerCount} {followerCount === 1 ? 'follower' : 'followers'}
+            </p>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Link
                 href={`/u/${series.creator_username}`}

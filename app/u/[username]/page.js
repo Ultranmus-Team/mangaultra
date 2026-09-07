@@ -75,7 +75,10 @@ export default async function PublicProfilePage({ params }) {
                   <CardHeader className="space-y-1.5 p-3">
                     <Badge variant="outline" className="w-fit capitalize">{s.content_type}</Badge>
                     <CardTitle className="line-clamp-2 text-sm leading-snug">{s.title}</CardTitle>
-                    <CardDescription className="text-xs">{s.chapter_count} chapters</CardDescription>
+                    <CardDescription className="text-xs">
+                      {s.chapter_count} {s.chapter_count === 1 ? 'chapter' : 'chapters'} ·{' '}
+                      {s.follower_count} {Number(s.follower_count) === 1 ? 'follower' : 'followers'}
+                    </CardDescription>
                   </CardHeader>
                 </Card>
               </Link>

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getCurrentProfile } from '@/lib/session';
 import { getMySeries, getUserBlockMessages, getThreadLastReadAt, isThreadUnread } from '@/lib/creator';
+import { getAuthorFollowerCount } from '@/lib/follows';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import MySeriesCard from '@/components/my-series-card';
@@ -13,7 +14,7 @@ export default async function DashboardPage() {
   const profile = await getCurrentProfile();
   if (!profile) redirect('/login');
 
-  const series = await getMySeries(profile.id);
+  const [series, followerCount] = await Promise.all([getMySeries(profile.id), getAuthorFollowerCount(profile.id)]);
   const blockMessages = profile.is_banned ? await getUserBlockMessages(profile.id) : [];
   const lastReadAt = profile.is_banned ? await getThreadLastReadAt(profile.id, 'account', profile.id) : null;
   const latestMessage = blockMessages[blockMessages.length - 1];
@@ -50,7 +51,9 @@ export default async function DashboardPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Your series</h1>
-          <p className="text-muted-foreground">Manage your manga and novels.</p>
+          <p className="text-muted-foreground">
+            Manage your manga and novels · {followerCount} {followerCount === 1 ? 'follower' : 'followers'}
+          </p>
         </div>
         <Link href="/dashboard/new">
           <Button>New series</Button>

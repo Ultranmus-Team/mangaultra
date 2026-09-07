@@ -21,7 +21,12 @@ export default function MySeriesCard({ series }) {
             <span className="text-xs capitalize text-muted-foreground">{series.content_type}</span>
           </div>
           <CardTitle className="line-clamp-2 text-sm leading-snug">{series.title}</CardTitle>
-          <CardDescription className="text-xs">{series.chapter_count} chapters</CardDescription>
+          <CardDescription className="text-xs">
+            {series.chapter_count} {series.chapter_count === 1 ? 'chapter' : 'chapters'}
+            {series.follower_count !== undefined && (
+              <> · {series.follower_count} {Number(series.follower_count) === 1 ? 'follower' : 'followers'}</>
+            )}
+          </CardDescription>
         </CardHeader>
       </Card>
     </Link>
