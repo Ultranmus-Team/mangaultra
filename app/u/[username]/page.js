@@ -2,11 +2,13 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getPublicProfile } from '@/lib/profile';
 import { getCurrentProfile } from '@/lib/session';
+import { isFollowingAuthor, getAuthorFollowerCount } from '@/lib/follows';
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import CoverPlaceholder from '@/components/cover-placeholder';
 import SeriesCover from '@/components/series-cover';
+import FollowAuthorButton from '@/components/follow-author-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +19,10 @@ export default async function PublicProfilePage({ params }) {
   const { profile, series } = data;
   const viewer = await getCurrentProfile();
   const isOwnProfile = viewer?.id === profile.id;
+  const [following, followerCount] = await Promise.all([
+    isOwnProfile ? Promise.resolve(false) : isFollowingAuthor(viewer?.id, profile.id),
+    getAuthorFollowerCount(profile.id),
+  ]);
 
   return (
     <div className="mx-auto max-w-3xl space-y-8">
@@ -33,11 +39,20 @@ export default async function PublicProfilePage({ params }) {
         )}
         <div className="flex-1 space-y-1">
           <h1 className="text-2xl font-semibold tracking-tight">{profile.username}</h1>
+          <p className="text-xs text-muted-foreground">
+            {followerCount} {followerCount === 1 ? 'follower' : 'followers'}
+          </p>
           {profile.bio && <p className="max-w-xl text-sm text-muted-foreground">{profile.bio}</p>}
         </div>
-        {isOwnProfile && (
+        {isOwnProfile ? (
           <Link href="/profile">
             <Button variant="outline" size="sm">Edit profile</Button>
+          </Link>
+        ) : viewer ? (
+          <FollowAuthorButton authorId={profile.id} username={profile.username} initialFollowing={following} />
+        ) : (
+          <Link href="/login">
+            <Button variant="outline" size="sm">Log in to follow</Button>
           </Link>
         )}
       </div>

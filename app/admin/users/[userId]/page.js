@@ -9,6 +9,7 @@ import BlockUserButton from '@/components/block-user-button';
 import UnblockUserButton from '@/components/unblock-user-button';
 import UserBlockThread from '@/components/user-block-thread';
 import StatusBadge from '@/components/status-badge';
+import SendAdminNoticeButton from '@/components/send-admin-notice-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,11 +41,14 @@ export default async function AdminUserPage({ params }) {
               {user.is_banned && <Badge variant="destructive">Blocked</Badge>}
             </div>
           </div>
-          {user.role !== 'admin' && (user.is_banned ? (
-            <UnblockUserButton userId={user.id} />
-          ) : (
-            <BlockUserButton userId={user.id} />
-          ))}
+          <div className="flex items-center gap-2">
+            <SendAdminNoticeButton userId={user.id} />
+            {user.role !== 'admin' && (user.is_banned ? (
+              <UnblockUserButton userId={user.id} />
+            ) : (
+              <BlockUserButton userId={user.id} />
+            ))}
+          </div>
         </div>
       </div>
 

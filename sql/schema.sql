@@ -194,3 +194,87 @@ CREATE INDEX IF NOT EXISTS idx_series_creator_id ON series(creator_id);
 CREATE INDEX IF NOT EXISTS idx_series_moderation_status ON series(moderation_status);
 CREATE INDEX IF NOT EXISTS idx_chapters_series_id ON chapters(series_id);
 CREATE INDEX IF NOT EXISTS idx_chapter_pages_chapter_id ON chapter_pages(chapter_id);
+
+-- Following an author notifies the follower whenever that author's next
+-- series is approved (see notifyFollowersNewManga in lib/notifications.js) —
+-- not when it's merely created, since a draft/pending series isn't visible
+-- to anyone but its owner and an admin yet.
+CREATE TABLE IF NOT EXISTS author_follows (
+    id SERIAL PRIMARY KEY,
+    follower_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    author_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (follower_id, author_id),
+    CHECK (follower_id != author_id)
+);
+CREATE INDEX IF NOT EXISTS idx_author_follows_author ON author_follows(author_id);
+CREATE INDEX IF NOT EXISTS idx_author_follows_follower ON author_follows(follower_id);
+
+-- Following a series notifies the follower on every new chapter, unless
+-- min_chapter is set — then only once a chapter reaches that number, for a
+-- reader who wants to wait until a series has caught up before diving in.
+CREATE TABLE IF NOT EXISTS series_follows (
+    id SERIAL PRIMARY KEY,
+    follower_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    series_id INT NOT NULL REFERENCES series(id) ON DELETE CASCADE,
+    min_chapter NUMERIC(6,1),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (follower_id, series_id)
+);
+CREATE INDEX IF NOT EXISTS idx_series_follows_series ON series_follows(series_id);
+CREATE INDEX IF NOT EXISTS idx_series_follows_follower ON series_follows(follower_id);
+
+-- One row per notification, per recipient. series_id/chapter_id are always
+-- populated together whenever a chapter is involved (comment_reply,
+-- reaction, new_chapter, a chapter-thread message) so lib/notifications.js
+-- can build the whole feed with one LEFT JOIN series + one LEFT JOIN
+-- chapters, regardless of type — the type-specific title/link is then built
+-- in JS, the same way lib/admin.js's getAllThreads merges heterogeneous rows.
+CREATE TABLE IF NOT EXISTS notifications (
+    id SERIAL PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    type VARCHAR(30) NOT NULL CHECK (type IN (
+        'new_manga', 'new_chapter', 'thread_message', 'comment_reply',
+        'new_follower', 'reaction', 'admin_notice', 'new_comment'
+    )),
+    actor_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
+    series_id INT REFERENCES series(id) ON DELETE CASCADE,
+    chapter_id INT REFERENCES chapters(id) ON DELETE CASCADE,
+    -- Always the THREAD ROOT (top-level) comment's id, even for a
+    -- comment_reply notification about a reply further down that thread —
+    -- see getCommentThread in lib/social.js, which is keyed off this.
+    comment_id INT REFERENCES chapter_comments(id) ON DELETE CASCADE,
+    -- thread_type/thread_id mirror thread_read_states above (TEXT thread_id
+    -- since account threads key off a UUID, chapter/series off a serial id).
+    thread_type VARCHAR(20),
+    thread_id TEXT,
+    body TEXT,
+    read_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    -- Never notify someone about their own action. lib/notifications.js's
+    -- createNotification already checks this in application code before
+    -- every insert, but that only guards call sites that remember to go
+    -- through it — this makes a self-notification structurally impossible
+    -- to insert at all, regardless of which code path (present or future)
+    -- tries to.
+    CHECK (actor_id IS NULL OR actor_id != user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_created ON notifications(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_unread ON notifications(user_id) WHERE read_at IS NULL;
+
+-- Re-running against a database created before 'new_comment' existed (a
+-- creator being notified about any new comment on their chapter, not just a
+-- reply to their own comment — see addChapterComment in lib/social.js).
+ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_type_check;
+ALTER TABLE notifications ADD CONSTRAINT notifications_type_check
+    CHECK (type IN (
+        'new_manga', 'new_chapter', 'thread_message', 'comment_reply',
+        'new_follower', 'reaction', 'admin_notice', 'new_comment'
+    ));
+
+-- Re-running against a database created before the self-notification CHECK
+-- existed — makes it structurally impossible to insert actor_id = user_id,
+-- on top of the application-level guard in createNotification.
+ALTER TABLE notifications DROP CONSTRAINT IF EXISTS notifications_actor_not_self_check;
+ALTER TABLE notifications ADD CONSTRAINT notifications_actor_not_self_check
+    CHECK (actor_id IS NULL OR actor_id != user_id);

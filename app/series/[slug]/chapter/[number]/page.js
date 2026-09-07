@@ -13,10 +13,12 @@ import ApproveChapterButton from '@/components/approve-chapter-button';
 import ChapterReactions from '@/components/chapter-reactions';
 import ChapterComments from '@/components/chapter-comments';
 import CoverPlaceholder from '@/components/cover-placeholder';
+import AutoMarkRead from '@/components/auto-mark-read';
 import { getChapterReviewMessages, isThreadUnread } from '@/lib/creator';
 import { getChapterComments, getChapterReactionState } from '@/lib/social';
 import { formatRelativeTime } from '@/lib/util';
 import { CHAPTER_THREAD_KINDS } from '@/lib/thread-kinds';
+import { markChapterNotificationsReadAction } from '@/app/notifications/actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -114,6 +116,7 @@ export default async function ChapterPage({ params }) {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
+      {profile && <AutoMarkRead action={markChapterNotificationsReadAction} args={[chapter.id]} />}
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <Link

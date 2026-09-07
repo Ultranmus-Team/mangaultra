@@ -76,6 +76,13 @@ export default function UserMenu({ username, avatarUrl }) {
             >
               Threads
             </Link>
+            <Link
+              href="/notifications"
+              onClick={() => setOpen(false)}
+              className="block px-3 py-2 text-sm transition-colors hover:bg-accent"
+            >
+              Notifications
+            </Link>
             <form action={signOutAction}>
               <button
                 type="submit"

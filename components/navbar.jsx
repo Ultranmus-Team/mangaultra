@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getCurrentProfile } from '@/lib/session';
 import { Button } from '@/components/ui/button';
 import UserMenu from '@/components/user-menu';
+import NotificationBell from '@/components/notification-bell';
 
 export default async function Navbar() {
   const profile = await getCurrentProfile();
@@ -28,6 +29,7 @@ export default async function Navbar() {
                   Admin
                 </Link>
               )}
+              <NotificationBell userId={profile.id} />
               <span className="ml-2">
                 <UserMenu username={profile.username} avatarUrl={profile.avatar_url} />
               </span>

@@ -141,6 +141,18 @@ export async function sendUserBlockMessageAction(userId, prevState, formData) {
   return { success: true, message };
 }
 
+export async function sendAdminNoticeAction(userId, prevState, formData) {
+  const profile = await requireAdmin();
+  const body = formData.get('body');
+
+  try {
+    await admin.sendAdminNotice(profile.id, userId, body);
+  } catch (err) {
+    return { error: err.message };
+  }
+  return { success: true };
+}
+
 export async function updateSettingsAction(prevState, formData) {
   await requireAdmin();
   const uploadsPaused = formData.get('uploadsPaused') === 'on';

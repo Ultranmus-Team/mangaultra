@@ -1,9 +1,11 @@
 'use server';
 
+import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { getCurrentProfile } from '@/lib/session';
 import { query } from '@/lib/db';
 import * as social from '@/lib/social';
+import * as follows from '@/lib/follows';
 
 // Chapter comments and reactions are open to any logged-in reader — unlike
 // dashboard/admin actions this never redirects to /login, it just returns
@@ -99,4 +101,40 @@ export async function getChapterCommentsAction(chapterId, offset) {
 
 export async function getChapterCommentRepliesAction(chapterId, parentId, offset) {
   return social.getChapterCommentReplies(chapterId, parentId, { offset });
+}
+
+async function slugForSeries(seriesId) {
+  const { rows } = await query('SELECT canonical_slug FROM series WHERE id = $1', [seriesId]);
+  return rows[0]?.canonical_slug;
+}
+
+// Re-following (already following) updates the min-chapter threshold rather
+// than erroring — see follows.followSeries.
+export async function followSeriesAction(seriesId, minChapter) {
+  const profile = await getCurrentProfile();
+  if (!profile) redirect('/login');
+
+  let result;
+  try {
+    result = await follows.followSeries(profile.id, seriesId, minChapter);
+  } catch (err) {
+    return { error: err.message };
+  }
+  const slug = await slugForSeries(seriesId);
+  if (slug) revalidatePath(`/series/${slug}`);
+  return { success: true, ...result };
+}
+
+export async function unfollowSeriesAction(seriesId) {
+  const profile = await getCurrentProfile();
+  if (!profile) redirect('/login');
+
+  try {
+    await follows.unfollowSeries(profile.id, seriesId);
+  } catch (err) {
+    return { error: err.message };
+  }
+  const slug = await slugForSeries(seriesId);
+  if (slug) revalidatePath(`/series/${slug}`);
+  return { success: true };
 }

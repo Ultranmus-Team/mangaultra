@@ -17,6 +17,8 @@ import ReviewThreadPreview from '@/components/review-thread-preview';
 import { formatRelativeTime } from '@/lib/util';
 import { getSeriesReviewMessages, isThreadUnread } from '@/lib/creator';
 import { SERIES_THREAD_KINDS } from '@/lib/thread-kinds';
+import { getSeriesFollowState } from '@/lib/follows';
+import FollowSeriesButton from '@/components/follow-series-button';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,6 +74,7 @@ export default async function SeriesPage({ params, searchParams }) {
   const isOwner = profile?.id === series.creator_id;
   const isAdmin = profile?.role === 'admin';
   const canManage = isOwner || isAdmin;
+  const followState = !isOwner && profile ? await getSeriesFollowState(profile.id, series.id) : null;
 
   if (series.moderation_status !== 'approved' && !canManage) notFound();
 
@@ -122,6 +125,13 @@ export default async function SeriesPage({ params, searchParams }) {
             {canManage && <StatusBadge status={series.moderation_status} />}
             <Badge variant="outline" className="capitalize">{series.content_type}</Badge>
           </div>
+          {followState && (
+            <FollowSeriesButton
+              seriesId={series.id}
+              initialFollowing={followState.following}
+              initialMinChapter={followState.minChapter}
+            />
+          )}
         </div>
 
         <div className="space-y-6">

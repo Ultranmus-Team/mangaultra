@@ -24,7 +24,7 @@ function Avatar({ username, avatarUrl, className }) {
   );
 }
 
-function Composer({ chapterId, parentId, placeholder, autoFocus, onPosted }) {
+export function Composer({ chapterId, parentId, placeholder, autoFocus, onPosted }) {
   const fileInputRef = useRef(null);
   const [body, setBody] = useState('');
   const [imageFile, setImageFile] = useState(null);
@@ -106,7 +106,7 @@ function Composer({ chapterId, parentId, placeholder, autoFocus, onPosted }) {
   );
 }
 
-function DeleteCommentButton({ chapterId, commentId, onDeleted }) {
+export function DeleteCommentButton({ chapterId, commentId, onDeleted }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState(null);
   const [isPending, startTransition] = useTransition();
@@ -150,7 +150,7 @@ function DeleteCommentButton({ chapterId, commentId, onDeleted }) {
   );
 }
 
-function CommentBody({ comment, canDelete, chapterId, onDeleted, actions }) {
+export function CommentBody({ comment, canDelete, chapterId, onDeleted, actions }) {
   return (
     <div className="flex gap-2.5">
       <Avatar
